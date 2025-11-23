@@ -56,6 +56,7 @@
         gap: 8px;
         margin-bottom: 12px;
         align-items: center;
+        position: relative;
       }
       input, select {
         flex: 1;
@@ -65,6 +66,7 @@
         font-size: 16px;
         transition: all 0.3s;
         background: #fff5f7;
+        caret-color: #e64980;
       }
       input:focus, select:focus {
         outline: none;
@@ -195,9 +197,9 @@
         width: 100%;
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
         border-radius: 8px;
-        top: 100%;
+        top: -4px;
         left: 0;
-        margin-top: 2px;
+        transform: translateY(-100%);
       }
       .autocomplete-item {
         padding: 8px 10px;
@@ -240,6 +242,13 @@
       .nutrition-value {
         font-weight: 600;
         color: #c2255c;
+      }
+      .total-nutrition {
+        background: #fff0f6;
+        border: 2px solid #fcc2d7;
+        border-radius: 12px;
+        padding: 16px;
+        margin: 10px 0;
       }
       @media (max-width: 480px) {
         .container {
@@ -301,6 +310,30 @@
         />
         <div class="ingredient-example">
           Обязательное поле! Учитывает уварку/ужарку продуктов
+        </div>
+      </div>
+
+      <div class="total-nutrition" id="totalNutrition" style="display: none;">
+        <div class="section-title">📊 Общее КБЖУ блюда</div>
+        <div class="nutrition-row">
+          <span>Калории:</span>
+          <span class="nutrition-value" id="totalCalories">0</span>
+        </div>
+        <div class="nutrition-row">
+          <span>Белки:</span>
+          <span class="nutrition-value" id="totalProtein">0 г</span>
+        </div>
+        <div class="nutrition-row">
+          <span>Жиры:</span>
+          <span class="nutrition-value" id="totalFat">0 г</span>
+        </div>
+        <div class="nutrition-row">
+          <span>Углеводы:</span>
+          <span class="nutrition-value" id="totalCarbs">0 г</span>
+        </div>
+        <div class="nutrition-row">
+          <span>Вес сырых ингредиентов:</span>
+          <span class="nutrition-value" id="totalWeight">0 г</span>
         </div>
       </div>
 
@@ -1353,6 +1386,7 @@
       const targetCaloriesInput = document.getElementById("targetCalories");
       const calculationResult = document.getElementById("calculationResult");
       const copyResultsBtn = document.getElementById("copyResultsBtn");
+      const totalNutrition = document.getElementById("totalNutrition");
 
       // ====== ИНИЦИАЛИЗАЦИЯ FUSE ======
       const fuse = new Fuse(Object.keys(productsDB), {
@@ -1366,6 +1400,7 @@
       let rowCounter = 0;
       let processedProductsCount = 0;
       const TEMPLATES_KEY = "kbj_templates_v1";
+      let currentDishNutrition = null;
 
       // ====== ФУНКЦИИ ======
       function showMessage(element, message, timeout = 4000) {
@@ -1564,13 +1599,24 @@
           totalWeight += ing.grams;
         });
 
-        return {
+        currentDishNutrition = {
           calories: Math.round(totalCalories),
           protein: Math.round(totalProtein * 10) / 10,
           fat: Math.round(totalFat * 10) / 10,
           carbs: Math.round(totalCarbs * 10) / 10,
           totalWeight: Math.round(totalWeight)
         };
+
+        return currentDishNutrition;
+      }
+
+      function displayTotalNutrition(nutrition) {
+        document.getElementById("totalCalories").textContent = nutrition.calories;
+        document.getElementById("totalProtein").textContent = nutrition.protein + " г";
+        document.getElementById("totalFat").textContent = nutrition.fat + " г";
+        document.getElementById("totalCarbs").textContent = nutrition.carbs + " г";
+        document.getElementById("totalWeight").textContent = nutrition.totalWeight + " г";
+        totalNutrition.style.display = "block";
       }
 
       function calculatePortionNutrition() {
@@ -1587,15 +1633,14 @@
         
         if (!nutrition) return;
 
-        // Формула: (вес порции / вес готового блюда) * вес сырых ингредиентов
-        const ratio = portionWeight / finalWeight;
-        const portionRatio = ratio * nutrition.totalWeight;
-
+        // ПРАВИЛЬНАЯ ФОРМУЛА: (Общая калорийность / Вес готового блюда) * Вес порции
+        const portionRatio = portionWeight / finalWeight;
+        
         const result = {
-          calories: Math.round(nutrition.calories * ratio),
-          protein: Math.round(nutrition.protein * ratio * 10) / 10,
-          fat: Math.round(nutrition.fat * ratio * 10) / 10,
-          carbs: Math.round(nutrition.carbs * ratio * 10) / 10,
+          calories: Math.round(nutrition.calories * portionRatio),
+          protein: Math.round(nutrition.protein * portionRatio * 10) / 10,
+          fat: Math.round(nutrition.fat * portionRatio * 10) / 10,
+          carbs: Math.round(nutrition.carbs * portionRatio * 10) / 10,
           weight: portionWeight
         };
 
@@ -1624,15 +1669,16 @@
         
         if (!nutrition) return;
 
-        // Формула: (вес готового блюда / вес сырых ингредиентов) * целевые калории
-        const ratio = finalWeight / nutrition.totalWeight;
-        const portionWeight = Math.round((targetCalories / nutrition.calories) * finalWeight);
+        // ПРАВИЛЬНАЯ ФОРМУЛА: (Калорийность порции * Общий вес блюда) / Общая калорийность блюда
+        const portionWeight = Math.round((targetCalories * finalWeight) / nutrition.calories);
 
+        const portionRatio = portionWeight / finalWeight;
+        
         const result = {
           calories: targetCalories,
-          protein: Math.round(nutrition.protein * (targetCalories / nutrition.calories) * 10) / 10,
-          fat: Math.round(nutrition.fat * (targetCalories / nutrition.calories) * 10) / 10,
-          carbs: Math.round(nutrition.carbs * (targetCalories / nutrition.calories) * 10) / 10,
+          protein: Math.round(nutrition.protein * portionRatio * 10) / 10,
+          fat: Math.round(nutrition.fat * portionRatio * 10) / 10,
+          carbs: Math.round(nutrition.carbs * portionRatio * 10) / 10,
           weight: portionWeight
         };
 
@@ -1735,6 +1781,231 @@
         });
       }
 
+      // ====== ШАБЛОНЫ ======
+      function getSavedTemplates() {
+        try {
+          return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || "[]");
+        } catch (e) {
+          console.error(e);
+          return [];
+        }
+      }
+
+      function saveTemplatesToStorage(arr) {
+        try {
+          localStorage.setItem(TEMPLATES_KEY, JSON.stringify(arr));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      function addTemplateToStorage(t) {
+        const arr = getSavedTemplates();
+        const idx = arr.findIndex((x) => x.name === t.name);
+        if (idx >= 0) arr[idx] = t;
+        else arr.push(t);
+        saveTemplatesToStorage(arr);
+      }
+
+      function createNamePromptModal() {
+        if (document.getElementById("templateNameModal")) return;
+        const modal = document.createElement("div");
+        modal.id = "templateNameModal";
+        Object.assign(modal.style, {
+          display: "none",
+          position: "fixed",
+          inset: "0",
+          background: "rgba(0,0,0,0.5)",
+          zIndex: 10000,
+          alignItems: "center",
+          justifyContent: "center",
+        });
+        modal.innerHTML = `
+          <div style="width:90%; max-width:420px; background:white; border-radius:12px; padding:14px; margin:20px;">
+            <div style="font-weight:600; margin-bottom:10px;">Название шаблона</div>
+            <input id="templateNameInput" type="text" placeholder="Название шаблона" style="width:100%; padding:10px; border:1px solid #eee; border-radius:8px; margin-bottom:12px;" />
+            <div style="display:flex; gap:8px;">
+              <button id="saveTemplateConfirm" class="btn btn-primary" style="flex:1;">Сохранить</button>
+              <button id="saveTemplateCancel" class="btn btn-secondary" style="flex:1;">Отмена</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById("saveTemplateCancel").onclick = () => {
+          modal.style.display = "none";
+        };
+      }
+
+      function saveTemplate() {
+        if (!validateForm()) {
+          showMessage(errorMessage, "❌ Заполните все поля перед сохранением шаблона");
+          return;
+        }
+
+        createNamePromptModal();
+        const modal = document.getElementById("templateNameModal");
+        const nameInput = document.getElementById("templateNameInput");
+        const confirmBtn = document.getElementById("saveTemplateConfirm");
+        const cancelBtn = document.getElementById("saveTemplateCancel");
+
+        nameInput.value = "";
+        modal.style.display = "flex";
+        nameInput.focus();
+
+        function cleanup() {
+          modal.style.display = "none";
+        }
+
+        function onConfirm() {
+          const raw = nameInput.value.trim();
+          const name = raw ? raw : `Мой шаблон ${new Date().toLocaleString()}`;
+          const template = {
+            name,
+            ingredients: getIngredients(),
+            final_weight: finalWeightInput.value.trim(),
+            created_at: new Date().toISOString(),
+          };
+          addTemplateToStorage(template);
+          showMessage(successMessage, `💾 Шаблон "${name}" сохранён`);
+          cleanup();
+        }
+
+        function onCancel() {
+          cleanup();
+        }
+
+        confirmBtn.onclick = onConfirm;
+        cancelBtn.onclick = onCancel;
+      }
+
+      function createTemplatesModal() {
+        if (document.getElementById("templatesModal")) return;
+        const modal = document.createElement("div");
+        modal.id = "templatesModal";
+        Object.assign(modal.style, {
+          display: "none",
+          position: "fixed",
+          inset: "0",
+          background: "rgba(0,0,0,0.5)",
+          zIndex: 9999,
+          alignItems: "center",
+          justifyContent: "center",
+        });
+        modal.innerHTML = `
+          <div style="width:90%; max-width:520px; background:white; border-radius:14px; padding:16px; margin:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <strong>📋 Мои шаблоны</strong>
+              <button id="closeTemplatesModal" style="background:#ff6b9d; color:white; border:none; border-radius:8px; padding:6px 10px; cursor:pointer;">✕</button>
+            </div>
+            <div id="templatesList" style="max-height:60vh; overflow:auto; gap:8px; display:flex; flex-direction:column;"></div>
+            <div style="display:flex; gap:8px; margin-top:12px;">
+              <button id="closeTemplatesModalFooter" class="btn btn-secondary" style="flex:1;">Закрыть</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById("closeTemplatesModal").onclick = () => {
+          modal.style.display = "none";
+        };
+        document.getElementById("closeTemplatesModalFooter").onclick = () => {
+          modal.style.display = "none";
+        };
+      }
+
+      function showMyTemplates() {
+        createTemplatesModal();
+        const modal = document.getElementById("templatesModal");
+        const list = document.getElementById("templatesList");
+        
+        const templates = getSavedTemplates();
+        list.innerHTML = "";
+
+        if (!templates.length) {
+          list.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">У вас ещё нет сохранённых шаблонов.</div>';
+        } else {
+          templates.forEach((temp) => {
+            const el = document.createElement("div");
+            Object.assign(el.style, {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px",
+              border: "1px solid #f1f1f1",
+              borderRadius: "8px",
+              marginBottom: "8px",
+              background: "white"
+            });
+            
+            const left = document.createElement("div");
+            left.style.flex = "1";
+            left.innerHTML = `
+              <strong style="color:#c2255c">${escapeHtml(temp.name)}</strong>
+              <div style="font-size:12px;color:#666">
+                ${(temp.ingredients || []).length} ингредиентов • ${escapeHtml(temp.final_weight || "—")} г
+              </div>
+            `;
+            
+            const actions = document.createElement("div");
+            actions.style.display = "flex";
+            actions.style.gap = "8px";
+            
+            const loadBtn = document.createElement("button");
+            loadBtn.className = "btn btn-primary";
+            loadBtn.style.padding = "6px 8px";
+            loadBtn.textContent = "Загрузить";
+            loadBtn.onclick = () => {
+              loadTemplateToForm(temp);
+              modal.style.display = "none";
+              showMessage(successMessage, `✅ Шаблон "${temp.name}" загружен`);
+            };
+            
+            const delBtn = document.createElement("button");
+            delBtn.className = "delete-btn";
+            delBtn.style.width = "36px";
+            delBtn.style.height = "36px";
+            delBtn.textContent = "×";
+            delBtn.onclick = () => {
+              if (!confirm(`Удалить шаблон "${temp.name}"?`)) return;
+              const arr = getSavedTemplates().filter((t) => t.name !== temp.name);
+              saveTemplatesToStorage(arr);
+              showMyTemplates();
+              showMessage(successMessage, "🗑 Шаблон удалён");
+            };
+            
+            actions.appendChild(loadBtn);
+            actions.appendChild(delBtn);
+            el.appendChild(left);
+            el.appendChild(actions);
+            list.appendChild(el);
+          });
+        }
+        
+        modal.style.display = "flex";
+      }
+
+      function loadTemplateToForm(template) {
+        // Очищаем все строки
+        rowsContainer.innerHTML = "";
+        
+        if (template.ingredients && template.ingredients.length) {
+          template.ingredients.forEach((item) => {
+            const unit = pieceProducts[item.ingredient.toLowerCase()] ? "шт" : "г";
+            addRow(item.ingredient || "", item.displayWeight || "", unit);
+          });
+        } else {
+          addRow();
+        }
+        
+        finalWeightInput.value = template.final_weight || "";
+        validateForm();
+        
+        // Пересчитываем КБЖУ
+        const nutrition = calculateDishNutrition();
+        if (nutrition) {
+          displayTotalNutrition(nutrition);
+        }
+      }
+
       // ====== ИНИЦИАЛИЗАЦИЯ ======
       function init() {
         // Добавляем первую строку
@@ -1744,11 +2015,13 @@
 
         // Обработчики событий
         addRowBtn.addEventListener("click", () => addRow());
+        
         calculateDishBtn.addEventListener("click", function() {
           const nutrition = calculateDishNutrition();
           if (nutrition) {
+            displayTotalNutrition(nutrition);
             showMessage(successMessage, 
-              `🍽️ КБЖУ блюда: ${nutrition.calories} ккал, Б: ${nutrition.protein}г, Ж: ${nutrition.fat}г, У: ${nutrition.carbs}г`
+              `✅ Расчет завершен! Смотрите общее КБЖУ блюда выше.`
             );
           }
         });
@@ -1756,6 +2029,9 @@
         calculatePortionBtn.addEventListener("click", calculatePortionNutrition);
         calculateWeightBtn.addEventListener("click", calculateWeightByCalories);
         copyResultsBtn.addEventListener("click", copyResultsToClipboard);
+        
+        saveTemplateBtn.addEventListener("click", saveTemplate);
+        myTemplatesBtn.addEventListener("click", showMyTemplates);
 
         finalWeightInput.addEventListener("input", validateForm);
         
